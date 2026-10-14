@@ -1,0 +1,41 @@
+name: SYNC
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Solo reportar, sin abrir PRs
+        type: boolean
+        default: false
+  schedule:
+    - cron: '0 9 * * 1' # lunes 06:00 ART
+  push:
+    branches: [main]
+    paths:
+      - templates/**
+      - scripts/sync.js
+
+concurrency:
+  group: sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/github-script@v8
+        env:
+          TOPIC: ${{ vars.SYNC_TOPIC || 'workflows' }}
+          WORKFLOWS_REF: ${{ vars.WORKFLOWS_REF || 'main' }}
+          ENFORCE_RULESET: ${{ vars.ENFORCE_RULESET || 'false' }}
+          DRY_RUN: ${{ inputs.dry-run || 'false' }}
+        with:
+          github-token: ${{ secrets.SYNC_TOKEN }}
+          script: |
+            const sync = require(`${process.env.GITHUB_WORKSPACE}/scripts/sync.js`);
+            await sync({ github, context, core });

@@ -1,0 +1,15 @@
+# Gestionado por {{WORKFLOWS_REPO}} — no editar manualmente (el SYNC lo sobrescribe).
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [{{DEFAULT_BRANCH}}]
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    permissions:
+      contents: write
+      pull-requests: read
+    uses: {{REUSABLE_PATH}}/reusable-release.yml{{REUSABLE_REF}}

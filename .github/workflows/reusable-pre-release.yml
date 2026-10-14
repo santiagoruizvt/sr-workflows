@@ -1,0 +1,89 @@
+# Workflow reutilizable: valida que un PR esté listo para generar un release.
+#
+# Requisitos que verifica:
+#   1. El título del PR contiene exactamente uno de: #major, #minor, #patch
+#   2. El PR modifica (agrega líneas a) el archivo de release notes
+#
+# Para que bloquee el merge, el check "pre-release / validate" debe ser
+# requerido en la rama por defecto (ruleset o branch protection).
+name: Pre-release (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      release-notes-path:
+        description: Ruta del archivo de release notes
+        type: string
+        default: RELEASE_NOTES.md
+    outputs:
+      bump:
+        description: Tipo de incremento detectado (major | minor | patch)
+        value: ${{ jobs.validate.outputs.bump }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      bump: ${{ steps.check.outputs.bump }}
+    steps:
+      - id: check
+        uses: actions/github-script@v8
+        env:
+          NOTES_PATH: ${{ inputs.release-notes-path }}
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed('Este workflow debe ejecutarse desde un evento pull_request.');
+              return;
+            }
+
+            const notesPath = process.env.NOTES_PATH;
+            const errors = [];
+
+            // 1. Etiqueta de versión en el título
+            const bumps = [...new Set(
+              (pr.title.match(/#(major|minor|patch)\b/gi) || []).map(t => t.slice(1).toLowerCase())
+            )];
+            if (bumps.length === 0) {
+              errors.push('El título del PR debe incluir una etiqueta de versión: `#major`, `#minor` o `#patch`.');
+            } else if (bumps.length > 1) {
+              errors.push(`El título del PR tiene más de una etiqueta de versión (${bumps.map(b => '#' + b).join(', ')}). Usá solo una.`);
+            }
+
+            // 2. Release notes actualizadas en este PR
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            const notes = files.find(f => f.filename === notesPath);
+            if (!notes) {
+              errors.push(`El PR debe actualizar \`${notesPath}\`.`);
+            } else if (notes.status === 'removed') {
+              errors.push(`El PR no puede eliminar \`${notesPath}\`.`);
+            } else if (notes.additions === 0) {
+              errors.push(`\`${notesPath}\` fue modificado pero no tiene líneas nuevas.`);
+            }
+
+            const bump = bumps.length === 1 ? bumps[0] : '';
+            core.setOutput('bump', bump);
+
+            await core.summary
+              .addHeading('Pre-release check', 2)
+              .addTable([
+                [{ data: 'Requisito', header: true }, { data: 'Estado', header: true }],
+                ['Etiqueta de versión en el título', bump ? `✅ #${bump}` : '❌'],
+                [`${notesPath} actualizado`, notes && notes.status !== 'removed' && notes.additions > 0 ? '✅' : '❌'],
+              ])
+              .write();
+
+            if (errors.length) {
+              errors.forEach(e => core.error(e));
+              core.setFailed(`El PR no cumple los requisitos de release:\n- ${errors.join('\n- ')}`);
+            } else {
+              core.notice(`PR listo para release (#${bump}).`);
+            }
