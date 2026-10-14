@@ -1,0 +1,14 @@
+# Gestionado por santiagoruizvt/sr-workflows — no editar manualmente (el SYNC lo sobrescribe).
+name: Pre-release
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+    branches: [main]
+
+jobs:
+  pre-release:
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/reusable-pre-release.yml

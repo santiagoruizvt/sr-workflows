@@ -1,0 +1,15 @@
+# Gestionado por santiagoruizvt/sr-workflows — no editar manualmente (el SYNC lo sobrescribe).
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    permissions:
+      contents: write
+      pull-requests: read
+    uses: ./.github/workflows/reusable-release.yml
